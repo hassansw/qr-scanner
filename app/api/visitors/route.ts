@@ -1,7 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const DEFAULT_VISITOR_API_URL = "https://qasolutionadvisor-api.hashmove.com/visitors/general";
+const DEFAULT_VISITOR_API_URL = "http://10.1.1.114:8000/visitors/general";
 const API_KEY = process.env.API_KEY;
 
 export async function POST(request: Request) {
