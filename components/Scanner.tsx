@@ -23,6 +23,27 @@ type BeforeInstallPromptEvent = Event & {
 
 const CAMERA_GRANTED_KEY = "qr-scanner:camera-granted";
 
+type FocusCapableTrack = MediaStreamTrack & {
+  getCapabilities?: () => unknown;
+};
+
+/** Ask for continuous autofocus when the device exposes it. */
+async function applyAutoFocus(track?: MediaStreamTrack) {
+  if (!track) return;
+  try {
+    const capabilities = (track as FocusCapableTrack).getCapabilities?.() as
+      | { focusMode?: string[] }
+      | undefined;
+    const modes = capabilities?.focusMode;
+    if (modes && !modes.includes("continuous")) return;
+    await track.applyConstraints({
+      advanced: [{ focusMode: "continuous" }] as unknown as MediaTrackConstraintSet[],
+    });
+  } catch {
+    /* autofocus control unsupported on this device */
+  }
+}
+
 export default function Scanner() {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -139,14 +160,23 @@ export default function Scanner() {
       }
 
       try {
-        const constraints: MediaStreamConstraints = {
-          video: deviceId
+        // focusMode/width/height are "ideal" hints — a device that lacks
+        // continuous autofocus still returns a stream.
+        const videoConstraints: MediaTrackConstraints = {
+          ...(deviceId
             ? { deviceId: { exact: deviceId } }
-            : { facingMode: { ideal: "environment" } },
-          audio: false,
+            : { facingMode: { ideal: "environment" } }),
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          advanced: [{ focusMode: "continuous" }] as unknown as MediaTrackConstraintSet[],
         };
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: videoConstraints,
+          audio: false,
+        });
         streamRef.current = stream;
+
+        await applyAutoFocus(stream.getVideoTracks()[0]);
 
         const video = videoRef.current;
         if (video) {

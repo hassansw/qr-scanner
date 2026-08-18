@@ -8,13 +8,19 @@ import { CheckIcon, ScanIcon, XIcon } from "@/components/Icons";
 
 type Props = {
   sessionUuid: string;
+  selected: number;
+  onSelect: (index: number) => void;
   onDone: (result: ScanResult) => void;
-  onManual: () => void;
   onCancel: () => void;
 };
 
-export default function VisitorPicker({ sessionUuid, onDone, onManual, onCancel }: Props) {
-  const [selected, setSelected] = useState(0);
+export default function VisitorPicker({
+  sessionUuid,
+  selected,
+  onSelect,
+  onDone,
+  onCancel,
+}: Props) {
   const [query, setQuery] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -107,7 +113,7 @@ export default function VisitorPicker({ sessionUuid, onDone, onManual, onCancel 
                 type="button"
                 role="radio"
                 aria-checked={isSelected}
-                onClick={() => setSelected(index)}
+                onClick={() => onSelect(index)}
                 disabled={submitting}
                 className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition disabled:opacity-50 ${
                   isSelected
@@ -172,14 +178,6 @@ export default function VisitorPicker({ sessionUuid, onDone, onManual, onCancel 
               Send selected
             </>
           )}
-        </button>
-        <button
-          type="button"
-          onClick={onManual}
-          disabled={submitting}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-zinc-700 px-4 text-sm font-semibold text-zinc-200 transition hover:border-zinc-500 disabled:opacity-50"
-        >
-          Enter manually
         </button>
       </div>
     </div>

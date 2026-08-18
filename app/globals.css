@@ -62,3 +62,15 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+/*
+ * iOS Safari zooms the viewport whenever a focused control renders below 16px.
+ * Bumping form controls to 16px on touch devices stops the zoom without
+ * disabling pinch-to-zoom for the whole page.
+ */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

@@ -4,12 +4,15 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { extractMessage, submitVisitor } from "@/lib/scanApi";
 import type { ScanResult, VisitorFormData } from "@/lib/types";
+import type { VisitorPreset } from "@/lib/presets";
 import { RefreshIcon, ScanIcon, XIcon } from "@/components/Icons";
 
 const VISITOR_TYPES = ["CUSTOMER", "SUPPLIER", "EMPLOYEE", "VENDOR", "GUEST"];
 
 type Props = {
   sessionUuid: string;
+  /** Seeds the fields so a picked record can be edited by hand. */
+  initial?: VisitorPreset;
   onDone: (result: ScanResult) => void;
   onCancel: () => void;
 };
@@ -32,14 +35,14 @@ function Field({
   );
 }
 
-export default function VisitorForm({ sessionUuid, onDone, onCancel }: Props) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [visitortype, setVisitortype] = useState("CUSTOMER");
-  const [isExisting, setIsExisting] = useState(false);
-  const [companyName, setCompanyName] = useState("");
-  const [website, setWebsite] = useState("");
+export default function VisitorForm({ sessionUuid, initial, onDone, onCancel }: Props) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [email, setEmail] = useState(initial?.email ?? "");
+  const [phone, setPhone] = useState(initial?.phone ?? "");
+  const [visitortype, setVisitortype] = useState(initial?.visitortype ?? "CUSTOMER");
+  const [isExisting, setIsExisting] = useState(initial?.is_existing ?? false);
+  const [companyName, setCompanyName] = useState(initial?.company_name ?? "");
+  const [website, setWebsite] = useState(initial?.website ?? "");
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (event: FormEvent) => {
@@ -75,6 +78,8 @@ export default function VisitorForm({ sessionUuid, onDone, onCancel }: Props) {
         timestamp: Date.now(),
         payload,
       });
+    } finally {
+      setSubmitting(false);
     }
   };
 
