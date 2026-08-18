@@ -147,7 +147,7 @@ export default function VisitorPicker({
         })}
       </ul>
 
-      <div className="mt-4">
+      {/* <div className="mt-4">
         <p className="text-[10px] font-semibold tracking-widest uppercase text-zinc-500">
           Payload to send
         </p>
@@ -158,7 +158,7 @@ export default function VisitorPicker({
             2
           )}
         </pre>
-      </div>
+      </div> */}
 
       <div className="mt-4 flex gap-2">
         <button
