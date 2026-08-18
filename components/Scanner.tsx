@@ -183,34 +183,29 @@ export default function Scanner() {
     [startScanningLoop, stopScanningLoop, stopStream]
   );
 
-  // Return to live scanning; restart the stream if it was lost.
-  const resumeScan = useCallback(() => {
+  // Full camera reset: tear the stream down and re-acquire it, then scan again.
+  const resetCamera = useCallback(() => {
     setSessionUuid(null);
     setManualEntry(false);
     setCameraError(null);
     lastCodeRef.current = null;
+    void setupCamera(cameraId || undefined);
+  }, [cameraId, setupCamera]);
 
-    const track = streamRef.current?.getVideoTracks()[0];
-    if (!track || track.readyState !== "live") {
-      void setupCamera(cameraId || undefined);
-      return;
-    }
-    setStatus("scanning");
-    startScanningLoop();
-  }, [cameraId, setupCamera, startScanningLoop]);
-
+  // Called on API success and on API failure alike.
   const handleVisitorDone = useCallback(
     (entry: ScanResult) => {
       setResult(entry);
-      resumeScan();
+      resetCamera();
     },
-    [resumeScan]
+    [resetCamera]
   );
 
+  // Called when the picker/form is closed or dismissed.
   const handleVisitorCancel = useCallback(() => {
     setResult(null);
-    resumeScan();
-  }, [resumeScan]);
+    resetCamera();
+  }, [resetCamera]);
 
   const toggleTorch = useCallback(async () => {
     const track = streamRef.current?.getVideoTracks()[0];
@@ -474,7 +469,7 @@ export default function Scanner() {
       {/* Result */}
       {result && !showingForm && (
         <div className="mt-4">
-          <ResultCard result={result} onScanAgain={() => setResult(null)} />
+          <ResultCard result={result} onScanAgain={resetCamera} />
         </div>
       )}
     </div>
