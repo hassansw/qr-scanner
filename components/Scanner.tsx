@@ -6,6 +6,7 @@ import { extractSessionUuid } from "@/lib/qr";
 import type { ScanResult, ScanStatus } from "@/lib/types";
 import ResultCard from "@/components/ResultCard";
 import VisitorForm from "@/components/VisitorForm";
+import VisitorPicker from "@/components/VisitorPicker";
 import {
   CameraIcon,
   FlashIcon,
@@ -33,6 +34,7 @@ export default function Scanner() {
   const [status, setStatus] = useState<ScanStatus>("idle");
   const [result, setResult] = useState<ScanResult | null>(null);
   const [sessionUuid, setSessionUuid] = useState<string | null>(null);
+  const [manualEntry, setManualEntry] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [cameraId, setCameraId] = useState<string>("");
@@ -80,6 +82,7 @@ export default function Scanner() {
 
       stopScanningLoop();
       setResult(null);
+      setManualEntry(false);
       setSessionUuid(uuid);
       setStatus("form");
     },
@@ -183,6 +186,7 @@ export default function Scanner() {
   // Return to live scanning; restart the stream if it was lost.
   const resumeScan = useCallback(() => {
     setSessionUuid(null);
+    setManualEntry(false);
     setCameraError(null);
     lastCodeRef.current = null;
 
@@ -317,11 +321,20 @@ export default function Scanner() {
       </header>
 
       {showingForm ? (
-        <VisitorForm
-          sessionUuid={sessionUuid}
-          onDone={handleVisitorDone}
-          onCancel={handleVisitorCancel}
-        />
+        manualEntry ? (
+          <VisitorForm
+            sessionUuid={sessionUuid}
+            onDone={handleVisitorDone}
+            onCancel={handleVisitorCancel}
+          />
+        ) : (
+          <VisitorPicker
+            sessionUuid={sessionUuid}
+            onDone={handleVisitorDone}
+            onManual={() => setManualEntry(true)}
+            onCancel={handleVisitorCancel}
+          />
+        )
       ) : (
         <>
           {/* Scanner viewport */}
