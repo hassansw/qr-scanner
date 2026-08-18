@@ -5,8 +5,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { extractSessionUuid } from "@/lib/qr";
 import type { ScanResult, ScanStatus } from "@/lib/types";
 import ResultCard from "@/components/ResultCard";
-import VisitorForm from "@/components/VisitorForm";
-import VisitorPicker from "@/components/VisitorPicker";
+import { useRouter } from "next/navigation";
 import {
   CameraIcon,
   FlashIcon,
@@ -22,7 +21,10 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: string }>;
 };
 
+const CAMERA_GRANTED_KEY = "qr-scanner:camera-granted";
+
 export default function Scanner() {
+  const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -33,8 +35,7 @@ export default function Scanner() {
 
   const [status, setStatus] = useState<ScanStatus>("idle");
   const [result, setResult] = useState<ScanResult | null>(null);
-  const [sessionUuid, setSessionUuid] = useState<string | null>(null);
-  const [manualEntry, setManualEntry] = useState(false);
+  const autoStartedRef = useRef(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [cameraId, setCameraId] = useState<string>("");
@@ -80,13 +81,14 @@ export default function Scanner() {
         return;
       }
 
+      // Shut the camera down before leaving; the register page runs without it.
       stopScanningLoop();
+      stopStream();
       setResult(null);
-      setManualEntry(false);
-      setSessionUuid(uuid);
-      setStatus("form");
+      setStatus("idle");
+      router.push(`/register/${encodeURIComponent(uuid)}`);
     },
-    [stopScanningLoop]
+    [router, stopScanningLoop, stopStream]
   );
 
   const startScanningLoop = useCallback(() => {
@@ -168,6 +170,12 @@ export default function Scanner() {
           "";
         setCameraId(activeId);
 
+        try {
+          sessionStorage.setItem(CAMERA_GRANTED_KEY, "1");
+        } catch {
+          /* storage unavailable */
+        }
+
         setStatus("scanning");
         startScanningLoop();
       } catch {
@@ -185,27 +193,11 @@ export default function Scanner() {
 
   // Full camera reset: tear the stream down and re-acquire it, then scan again.
   const resetCamera = useCallback(() => {
-    setSessionUuid(null);
-    setManualEntry(false);
     setCameraError(null);
     lastCodeRef.current = null;
+    setResult(null);
     void setupCamera(cameraId || undefined);
   }, [cameraId, setupCamera]);
-
-  // Called on API success and on API failure alike.
-  const handleVisitorDone = useCallback(
-    (entry: ScanResult) => {
-      setResult(entry);
-      resetCamera();
-    },
-    [resetCamera]
-  );
-
-  // Called when the picker/form is closed or dismissed.
-  const handleVisitorCancel = useCallback(() => {
-    setResult(null);
-    resetCamera();
-  }, [resetCamera]);
 
   const toggleTorch = useCallback(async () => {
     const track = streamRef.current?.getVideoTracks()[0];
@@ -270,6 +262,33 @@ export default function Scanner() {
     setInstallReady(false);
   };
 
+  // Coming back from the register page shouldn't need another tap, but a first
+  // visit still gets the explicit permission button.
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    autoStartedRef.current = true;
+
+    let granted = false;
+    try {
+      granted = sessionStorage.getItem(CAMERA_GRANTED_KEY) === "1";
+    } catch {
+      /* storage unavailable */
+    }
+    if (granted) {
+      void setupCamera();
+      return;
+    }
+
+    void navigator.permissions
+      ?.query({ name: "camera" as PermissionName })
+      .then((permission) => {
+        if (permission.state === "granted") void setupCamera();
+      })
+      .catch(() => {
+        /* Permissions API unsupported for camera */
+      });
+  }, [setupCamera]);
+
   useEffect(() => {
     return () => {
       stopScanningLoop();
@@ -288,7 +307,6 @@ export default function Scanner() {
   }, []);
 
   const cameraActive = status === "scanning";
-  const showingForm = status === "form" && sessionUuid !== null;
 
   return (
     <div className="mx-auto w-full max-w-md flex-1 px-4 pb-8">
@@ -315,23 +333,6 @@ export default function Scanner() {
         )}
       </header>
 
-      {showingForm ? (
-        manualEntry ? (
-          <VisitorForm
-            sessionUuid={sessionUuid}
-            onDone={handleVisitorDone}
-            onCancel={handleVisitorCancel}
-          />
-        ) : (
-          <VisitorPicker
-            sessionUuid={sessionUuid}
-            onDone={handleVisitorDone}
-            onManual={() => setManualEntry(true)}
-            onCancel={handleVisitorCancel}
-          />
-        )
-      ) : (
-        <>
           {/* Scanner viewport */}
           <div className="relative aspect-square w-full overflow-hidden rounded-2xl border border-zinc-800 bg-black">
             <video
@@ -463,11 +464,9 @@ export default function Scanner() {
               Point the camera at a QR code — it opens the registration form.
             </p>
           )}
-        </>
-      )}
 
       {/* Result */}
-      {result && !showingForm && (
+      {result && (
         <div className="mt-4">
           <ResultCard result={result} onScanAgain={resetCamera} />
         </div>
