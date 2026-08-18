@@ -1,4 +1,12 @@
-export type ScanStatus = "idle" | "scanning";
+export type ScanStatus =
+  /** No camera stream yet. */
+  | "idle"
+  /** Live preview, detection loop running. */
+  | "scanning"
+  /** Code found; camera shutting down and the register page opening. */
+  | "detected"
+  /** Decoding an uploaded image. */
+  | "processing";
 
 export type ScanResult = {
   code: string;

@@ -102,11 +102,12 @@ export default function Scanner() {
         return;
       }
 
-      // Shut the camera down before leaving; the register page runs without it.
+      // Cover the viewport with the loader *before* killing the stream, so the
+      // preview never flashes to an empty black square mid-navigation.
+      setResult(null);
+      setStatus("detected");
       stopScanningLoop();
       stopStream();
-      setResult(null);
-      setStatus("idle");
       router.push(`/register/${encodeURIComponent(uuid)}`);
     },
     [router, stopScanningLoop, stopStream]
@@ -246,42 +247,33 @@ export default function Scanner() {
   const handleUpload = useCallback(
     (file: File) => {
       setResult(null);
+      stopScanningLoop();
+      setStatus("processing");
+
+      const fail = (message: string) => {
+        setStatus(streamRef.current ? "scanning" : "idle");
+        startScanningLoop();
+        setResult({ code: "", status: "error", message, timestamp: Date.now() });
+      };
 
       const reader = new FileReader();
-      reader.onerror = () => {
-        setResult({
-          code: "",
-          status: "error",
-          message: "Could not read that image file.",
-          timestamp: Date.now(),
-        });
-      };
+      reader.onerror = () => fail("Could not read that image file.");
       reader.onload = async () => {
         const image = await imageDataFromUrl(reader.result as string);
         if (!image) {
-          setResult({
-            code: "",
-            status: "error",
-            message: "Could not read that image file.",
-            timestamp: Date.now(),
-          });
+          fail("Could not read that image file.");
           return;
         }
         const text = decodeImageData(image.data, image.width, image.height, true);
         if (!text) {
-          setResult({
-            code: "",
-            status: "error",
-            message: "No QR code found in that image.",
-            timestamp: Date.now(),
-          });
+          fail("No QR code found in that image.");
           return;
         }
         handleScan(text);
       };
       reader.readAsDataURL(file);
     },
-    [handleScan]
+    [handleScan, startScanningLoop, stopScanningLoop]
   );
 
   const install = async () => {
@@ -336,7 +328,8 @@ export default function Scanner() {
     return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
 
-  const cameraActive = status === "scanning";
+  const cameraActive = status === "scanning" || status === "detected";
+  const busy = status === "detected" || status === "processing";
 
   return (
     <div className="mx-auto w-full max-w-md flex-1 px-4 pb-8">
@@ -374,7 +367,21 @@ export default function Scanner() {
             />
             <canvas ref={canvasRef} className="hidden" />
 
-            {cameraError ? (
+            {busy && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black/75 backdrop-blur-sm">
+                <span className="h-10 w-10 animate-spin rounded-full border-[3px] border-zinc-700 border-t-emerald-400" />
+                <p className="text-sm font-semibold text-zinc-200">
+                  {status === "detected" ? "QR code detected" : "Reading image…"}
+                </p>
+                <p className="text-xs text-zinc-500">
+                  {status === "detected"
+                    ? "Opening the registration form…"
+                    : "Looking for a QR code…"}
+                </p>
+              </div>
+            )}
+
+            {busy ? null : cameraError ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8 text-center">
                 <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-800 text-zinc-400">
                   <CameraIcon className="h-8 w-8" />
@@ -444,6 +451,7 @@ export default function Scanner() {
               <select
                 value={cameraId}
                 onChange={(event) => void setupCamera(event.target.value)}
+                disabled={busy}
                 aria-label="Switch camera"
                 className="h-11 flex-1 truncate rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm text-zinc-200 outline-none focus:border-emerald-500"
               >
@@ -462,7 +470,7 @@ export default function Scanner() {
             <button
               type="button"
               onClick={() => void toggleTorch()}
-              disabled={!cameraActive}
+              disabled={status !== "scanning"}
               aria-label="Toggle flashlight"
               className={`flex h-11 w-12 items-center justify-center rounded-xl border transition disabled:opacity-40 ${
                 torchOn
@@ -472,12 +480,17 @@ export default function Scanner() {
             >
               {torchOn ? <FlashIcon className="h-5 w-5" /> : <FlashOffIcon className="h-5 w-5" />}
             </button>
-            <label className="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-sm font-medium text-zinc-200 transition hover:border-zinc-500">
+            <label
+              className={`flex h-11 items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-sm font-medium text-zinc-200 transition ${
+                busy ? "pointer-events-none opacity-40" : "cursor-pointer hover:border-zinc-500"
+              }`}
+            >
               <UploadIcon className="h-4.5 w-4.5" />
               Image
               <input
                 type="file"
                 accept="image/*"
+                disabled={busy}
                 className="hidden"
                 onChange={(event) => {
                   const file = event.target.files?.[0];
