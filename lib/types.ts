@@ -5,6 +5,7 @@ export type ScanResult = {
   status: "success" | "error";
   timestamp: number;
   message: string;
+  payload?: VisitorFormData;
 };
 
 export type ScanApiResponse = {

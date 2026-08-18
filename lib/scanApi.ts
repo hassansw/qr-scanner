@@ -34,5 +34,5 @@ export function extractMessage(data: unknown, ok: boolean): string {
       /* ignore */
     }
   }
-  return ok ? "Visitor registered" : "Visitor registration failed";
+  return ok ? "Visitor registered successfully" : "Visitor registration failed";
 }

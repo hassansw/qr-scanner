@@ -7,7 +7,7 @@ Built with Next.js (App Router), TypeScript, Tailwind CSS, and [jsQR](https://gi
 ## Features
 
 - Camera permission flow that works on iPhone (Safari) and Android: tap **Allow Camera Access** to request permission on a user gesture
-- **Open Camera** fallback (native camera via `capture="environment"`) that works even over plain HTTP, where browsers block `getUserMedia`
+- **Image** upload fallback for cameras that are unavailable or blocked over plain HTTP
 - Robust QR decoding via ZXing (with jsQR fallback) — works with real-world photos, perspective distortion, and iOS HEIC images
 - Live camera scanning with animated focus frame and scan line
 - Image upload fallback for cameras that are unavailable or denied
@@ -40,7 +40,7 @@ The client posts the form to the local proxy at `/api/visitors` (`app/api/visito
 
 ### Flow
 
-1. On a phone over plain HTTP, tap **Open Camera** (native camera) or, over HTTPS, tap **Allow Camera Access** to grant permission.
+1. Tap **Allow Camera Access** to grant camera permission (required on iOS).
 2. Point the camera at a QR code (or upload an image).
 3. The UUID is extracted from the code (`hm-<uuid>` → `<uuid>`) and the registration form opens.
 4. Submitting the form POSTs the payload to the visitors API.

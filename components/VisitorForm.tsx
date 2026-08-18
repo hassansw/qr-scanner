@@ -65,6 +65,7 @@ export default function VisitorForm({ sessionUuid, onDone, onCancel }: Props) {
         status: res.ok ? "success" : "error",
         message: extractMessage(res.data, res.ok),
         timestamp: Date.now(),
+        payload,
       });
     } catch {
       onDone({
@@ -72,6 +73,7 @@ export default function VisitorForm({ sessionUuid, onDone, onCancel }: Props) {
         status: "error",
         message: "Network error while submitting the visitor form.",
         timestamp: Date.now(),
+        payload,
       });
     }
   };

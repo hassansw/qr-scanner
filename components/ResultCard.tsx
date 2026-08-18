@@ -19,6 +19,7 @@ type Props = {
 
 export default function ResultCard({ result, onScanAgain, onRetry }: Props) {
   const [copied, setCopied] = useState(false);
+  const [copiedPayload, setCopiedPayload] = useState(false);
   const isSuccess = result.status === "success";
 
   const copy = async () => {
@@ -31,7 +32,19 @@ export default function ResultCard({ result, onScanAgain, onRetry }: Props) {
     }
   };
 
+  const copyPayload = async () => {
+    if (!result.payload) return;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(result.payload, null, 2));
+      setCopiedPayload(true);
+      setTimeout(() => setCopiedPayload(false), 1500);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
+
   const isUrl = /^https?:\/\//i.test(result.code);
+  const hasPayload = result.payload !== undefined;
 
   return (
     <div
@@ -54,7 +67,7 @@ export default function ResultCard({ result, onScanAgain, onRetry }: Props) {
 
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold tracking-wide uppercase text-zinc-400">
-            {isSuccess ? "Validated" : "Rejected"}
+            {isSuccess ? "Registered" : "Failed"}
           </p>
           <p
             className={`mt-0.5 text-lg font-bold break-all ${
@@ -63,11 +76,38 @@ export default function ResultCard({ result, onScanAgain, onRetry }: Props) {
           >
             {result.message}
           </p>
-          <p className="mt-2 font-mono text-xs break-all rounded-md bg-black/30 px-2.5 py-2 text-zinc-300">
-            {result.code}
-          </p>
         </div>
       </div>
+
+      {result.code && (
+        <div className="mt-4 rounded-xl border border-zinc-700/70 bg-black/30 p-3.5">
+          <p className="text-[10px] font-semibold tracking-widest uppercase text-zinc-500">
+            Session UUID
+          </p>
+          <p className="mt-1 font-mono text-sm break-all text-zinc-200">{result.code}</p>
+        </div>
+      )}
+
+      {hasPayload && (
+        <div className="mt-3">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-semibold tracking-widest uppercase text-zinc-500">
+              Submitted payload
+            </p>
+            <button
+              type="button"
+              onClick={copyPayload}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-400 transition hover:text-zinc-200"
+            >
+              <CopyIcon className="h-3.5 w-3.5" />
+              {copiedPayload ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <pre className="no-scrollbar mt-2 max-h-56 overflow-auto rounded-xl border border-zinc-700/70 bg-black/30 p-3.5 font-mono text-[11px] leading-relaxed text-zinc-300">
+            {JSON.stringify(result.payload, null, 2)}
+          </pre>
+        </div>
+      )}
 
       <div className="mt-4 flex flex-wrap gap-2">
         <button
@@ -94,7 +134,7 @@ export default function ResultCard({ result, onScanAgain, onRetry }: Props) {
           className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-600 px-4 text-sm font-semibold text-zinc-200 transition hover:border-zinc-400"
         >
           <CopyIcon className="h-4 w-4" />
-          {copied ? "Copied" : "Copy"}
+          {copied ? "Copied" : "Copy UUID"}
         </button>
         {isUrl && (
           <a

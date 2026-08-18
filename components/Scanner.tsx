@@ -219,13 +219,14 @@ export default function Scanner() {
   const resumeScan = useCallback(() => {
     setResult(null);
     setSessionUuid(null);
+    setCameraError(null);
     if (!streamRef.current) {
-      void setupCamera();
+      setStatus("idle");
       return;
     }
     setStatus("scanning");
     startScanningLoop();
-  }, [setupCamera, startScanningLoop]);
+  }, [startScanningLoop]);
 
   const toggleTorch = useCallback(async () => {
     const track = streamRef.current?.getVideoTracks()[0];
