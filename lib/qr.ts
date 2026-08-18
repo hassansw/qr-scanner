@@ -2,8 +2,13 @@ const UUID_PATTERN = /\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 
 export function extractSessionUuid(code: string): string | null {
   const trimmed = code.trim();
+
   const match = trimmed.match(UUID_PATTERN);
-  const base = match ? match[1] : trimmed.replace(/^hm-/i, "");
-  const value = base.trim();
-  return value.length > 0 ? value : null;
+  if (match) return match[1];
+
+  // `hm-<id>` codes carry the session id directly.
+  const prefixed = /^hm-(\S+)$/i.exec(trimmed);
+  if (prefixed) return prefixed[1];
+
+  return null;
 }

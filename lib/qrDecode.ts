@@ -17,6 +17,20 @@ const hintsHarder = new Map();
 hintsHarder.set(DecodeHintType.POSSIBLE_FORMATS, []);
 hintsHarder.set(DecodeHintType.TRY_HARDER, true);
 
+// zxing's RGBLuminanceSource treats a Uint8ClampedArray as a ready-made
+// luminance plane (one byte per pixel), so RGBA canvas data must be converted
+// first — otherwise it decodes garbage and never finds a code.
+function toLuminance(data: Uint8ClampedArray, width: number, height: number) {
+  const size = width * height;
+  const luminances = new Uint8ClampedArray(size);
+  for (let i = 0; i < size; i++) {
+    const offset = i * 4;
+    luminances[i] =
+      (data[offset] * 306 + data[offset + 1] * 601 + data[offset + 2] * 117) >> 10;
+  }
+  return luminances;
+}
+
 export function decodeImageData(
   data: Uint8ClampedArray,
   width: number,
@@ -24,7 +38,7 @@ export function decodeImageData(
   tryHarder = false
 ): string | null {
   try {
-    const source = new RGBLuminanceSource(data, width, height);
+    const source = new RGBLuminanceSource(toLuminance(data, width, height), width, height);
     const bitmap = new BinaryBitmap(new HybridBinarizer(source));
     const result = zxingReader.decode(bitmap, tryHarder ? hintsHarder : hintsNormal);
     return result.getText();
@@ -33,7 +47,7 @@ export function decodeImageData(
   }
 
   try {
-    const qr = jsQR(data, width, height);
+    const qr = jsQR(data, width, height, { inversionAttempts: "attemptBoth" });
     if (qr?.data) return qr.data;
   } catch {
     /* not found by jsQR */

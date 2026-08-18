@@ -54,7 +54,7 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
-/* Hide scrollbar in the history list while keeping it scrollable */
+/* Hide scrollbar while keeping the element scrollable */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }

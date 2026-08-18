@@ -1,5 +1,17 @@
 import type { ScanApiResponse, VisitorFormData } from "@/lib/types";
 
+type ProxyEnvelope = { ok: boolean; status: number; data: unknown };
+
+function isProxyEnvelope(value: unknown): value is ProxyEnvelope {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    "ok" in value &&
+    "status" in value &&
+    "data" in value
+  );
+}
+
 export async function submitVisitor(payload: VisitorFormData): Promise<ScanApiResponse> {
   const response = await fetch("/api/visitors", {
     method: "POST",
@@ -12,6 +24,12 @@ export async function submitVisitor(payload: VisitorFormData): Promise<ScanApiRe
     body = await response.json();
   } catch {
     body = await response.text();
+  }
+
+  // /api/visitors wraps the upstream reply in { ok, status, data } — unwrap it
+  // so message extraction sees the upstream body, not the envelope.
+  if (isProxyEnvelope(body)) {
+    return { ok: response.ok && body.ok, status: body.status, data: body.data };
   }
 
   return { ok: response.ok, status: response.status, data: body };
@@ -29,7 +47,7 @@ export function extractMessage(data: unknown, ok: boolean): string {
   if (data && typeof data === "object") {
     try {
       const str = JSON.stringify(data);
-      if (str) return str.length > 160 ? `${str.slice(0, 157)}...` : str;
+      if (str && str !== "{}") return str.length > 160 ? `${str.slice(0, 157)}...` : str;
     } catch {
       /* ignore */
     }

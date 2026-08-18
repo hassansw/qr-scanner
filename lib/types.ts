@@ -1,4 +1,4 @@
-export type ScanStatus = "idle" | "scanning" | "form" | "success" | "error";
+export type ScanStatus = "idle" | "scanning" | "form";
 
 export type ScanResult = {
   code: string;

@@ -1,7 +1,7 @@
 "use client";
 
 import { decodeImageData, imageDataFromUrl } from "@/lib/qrDecode";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { extractSessionUuid } from "@/lib/qr";
 import type { ScanResult, ScanStatus } from "@/lib/types";
 import ResultCard from "@/components/ResultCard";
@@ -13,37 +13,13 @@ import {
   InstallIcon,
   RefreshIcon,
   ScanIcon,
-  TrashIcon,
   UploadIcon,
 } from "@/components/Icons";
-
-const HISTORY_KEY = "qr-scanner:history";
-const MAX_HISTORY = 12;
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: string }>;
 };
-
-function readHistory(): ScanResult[] {
-  try {
-    const raw = localStorage.getItem(HISTORY_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as ScanResult[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function timeAgo(timestamp: number): string {
-  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
-  if (seconds < 5) return "just now";
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  return `${Math.floor(minutes / 60)}h ago`;
-}
 
 export default function Scanner() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -61,11 +37,12 @@ export default function Scanner() {
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [cameraId, setCameraId] = useState<string>("");
   const [torchOn, setTorchOn] = useState(false);
-  const [history, setHistory] = useState<ScanResult[]>(() => readHistory());
   const [installReady, setInstallReady] = useState(false);
-
-  const [insecure] = useState(
-    () => typeof window !== "undefined" && !window.isSecureContext
+  // Read on the client only; the server snapshot keeps hydration consistent.
+  const insecure = useSyncExternalStore(
+    () => () => {},
+    () => !window.isSecureContext,
+    () => false
   );
 
   const stopScanningLoop = useCallback(() => {
@@ -75,23 +52,11 @@ export default function Scanner() {
     }
   }, []);
 
-  const captureInputRef = useRef<HTMLInputElement>(null);
-
-  const openDeviceCamera = useCallback(() => {
-    stopScanningLoop();
-    captureInputRef.current?.click();
-  }, [stopScanningLoop]);
-
-  const pushHistory = useCallback((entry: ScanResult) => {
-    setHistory((prev) => {
-      const next = [entry, ...prev].slice(0, MAX_HISTORY);
-      try {
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
-      } catch {
-        /* storage full */
-      }
-      return next;
-    });
+  const stopStream = useCallback(() => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    const video = videoRef.current;
+    if (video) video.srcObject = null;
   }, []);
 
   const handleScan = useCallback(
@@ -101,28 +66,24 @@ export default function Scanner() {
       if (last && last.code === code && now - last.at < 2000) return;
       lastCodeRef.current = { code, at: now };
 
-      stopScanningLoop();
-
       const uuid = extractSessionUuid(code);
       if (!uuid) {
-        const scanResult: ScanResult = {
+        // Keep the camera running so the operator can retry immediately.
+        setResult({
           code,
           status: "error",
           message: "Could not find a valid session UUID in that QR code.",
           timestamp: now,
-        };
-        setResult(scanResult);
-        setSessionUuid(null);
-        setStatus("error");
-        pushHistory(scanResult);
+        });
         return;
       }
 
+      stopScanningLoop();
       setResult(null);
       setSessionUuid(uuid);
       setStatus("form");
     },
-    [pushHistory, stopScanningLoop]
+    [stopScanningLoop]
   );
 
   const startScanningLoop = useCallback(() => {
@@ -133,6 +94,7 @@ export default function Scanner() {
       const video = videoRef.current;
       const canvas = canvasRef.current;
       if (!video || !canvas || video.readyState < 2 || detectingRef.current) return;
+      if (!video.videoWidth || !video.videoHeight) return;
 
       detectingRef.current = true;
       try {
@@ -159,13 +121,13 @@ export default function Scanner() {
   const setupCamera = useCallback(
     async (deviceId?: string) => {
       stopScanningLoop();
-      streamRef.current?.getTracks().forEach((track) => track.stop());
+      stopStream();
       setCameraError(null);
       setTorchOn(false);
 
       if (!navigator.mediaDevices?.getUserMedia) {
         setCameraError(
-          "Camera API not supported in this browser. Open the device camera or use the upload option."
+          "Camera API not supported in this browser. Use the image upload option instead."
         );
         setStatus("idle");
         return;
@@ -175,7 +137,7 @@ export default function Scanner() {
         const constraints: MediaStreamConstraints = {
           video: deviceId
             ? { deviceId: { exact: deviceId } }
-            : { facingMode: "environment" },
+            : { facingMode: { ideal: "environment" } },
           audio: false,
         };
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -184,49 +146,67 @@ export default function Scanner() {
         const video = videoRef.current;
         if (video) {
           video.srcObject = stream;
-          await video.play();
+          try {
+            await video.play();
+          } catch {
+            /* play() rejects when the element is re-sourced mid-play */
+          }
         }
 
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoInputs = devices.filter((device) => device.kind === "videoinput");
         setCameras(videoInputs);
-        if (!deviceId && videoInputs.length > 0) setCameraId(videoInputs[0].deviceId);
+
+        // Track the device actually in use, so the picker stays in sync.
+        const activeId =
+          stream.getVideoTracks()[0]?.getSettings().deviceId ??
+          deviceId ??
+          videoInputs[0]?.deviceId ??
+          "";
+        setCameraId(activeId);
 
         setStatus("scanning");
         startScanningLoop();
       } catch {
+        stopStream();
         setCameraError(
           window.isSecureContext
             ? "Camera unavailable or permission denied. Allow camera access in your browser settings, then try again."
-            : "Camera access needs HTTPS. Open the device camera instead."
+            : "Camera access needs HTTPS. Open this page over a secure connection."
         );
         setStatus("idle");
       }
     },
-    [startScanningLoop, stopScanningLoop]
+    [startScanningLoop, stopScanningLoop, stopStream]
   );
 
-  const handleVisitorDone = useCallback(
-    (entry: ScanResult) => {
-      setResult(entry);
-      setSessionUuid(null);
-      setStatus(entry.status);
-      pushHistory(entry);
-    },
-    [pushHistory]
-  );
-
+  // Return to live scanning; restart the stream if it was lost.
   const resumeScan = useCallback(() => {
-    setResult(null);
     setSessionUuid(null);
     setCameraError(null);
-    if (!streamRef.current) {
-      setStatus("idle");
+    lastCodeRef.current = null;
+
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track || track.readyState !== "live") {
+      void setupCamera(cameraId || undefined);
       return;
     }
     setStatus("scanning");
     startScanningLoop();
-  }, [startScanningLoop]);
+  }, [cameraId, setupCamera, startScanningLoop]);
+
+  const handleVisitorDone = useCallback(
+    (entry: ScanResult) => {
+      setResult(entry);
+      resumeScan();
+    },
+    [resumeScan]
+  );
+
+  const handleVisitorCancel = useCallback(() => {
+    setResult(null);
+    resumeScan();
+  }, [resumeScan]);
 
   const toggleTorch = useCallback(async () => {
     const track = streamRef.current?.getVideoTracks()[0];
@@ -244,57 +224,59 @@ export default function Scanner() {
 
   const handleUpload = useCallback(
     (file: File) => {
-      stopScanningLoop();
       setResult(null);
 
       const reader = new FileReader();
+      reader.onerror = () => {
+        setResult({
+          code: "",
+          status: "error",
+          message: "Could not read that image file.",
+          timestamp: Date.now(),
+        });
+      };
       reader.onload = async () => {
         const image = await imageDataFromUrl(reader.result as string);
         if (!image) {
-          const scanResult: ScanResult = {
+          setResult({
             code: "",
             status: "error",
             message: "Could not read that image file.",
             timestamp: Date.now(),
-          };
-          setResult(scanResult);
-          setStatus("error");
-          pushHistory(scanResult);
+          });
           return;
         }
         const text = decodeImageData(image.data, image.width, image.height, true);
         if (!text) {
-          const scanResult: ScanResult = {
+          setResult({
             code: "",
             status: "error",
             message: "No QR code found in that image.",
             timestamp: Date.now(),
-          };
-          setResult(scanResult);
-          setStatus("error");
-          pushHistory(scanResult);
+          });
           return;
         }
         handleScan(text);
       };
       reader.readAsDataURL(file);
     },
-    [handleScan, pushHistory, stopScanningLoop]
+    [handleScan]
   );
 
   const install = async () => {
     const promptEvent = promptRef.current;
     if (!promptEvent) return;
     await promptEvent.prompt();
+    promptRef.current = null;
     setInstallReady(false);
   };
 
   useEffect(() => {
     return () => {
       stopScanningLoop();
-      streamRef.current?.getTracks().forEach((track) => track.stop());
+      stopStream();
     };
-  }, [stopScanningLoop]);
+  }, [stopScanningLoop, stopStream]);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -325,7 +307,7 @@ export default function Scanner() {
         {installReady && (
           <button
             type="button"
-            onClick={install}
+            onClick={() => void install()}
             className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-zinc-700 px-3 text-xs font-semibold text-zinc-200 transition hover:border-emerald-500 hover:text-emerald-300"
           >
             <InstallIcon className="h-4 w-4" />
@@ -335,7 +317,11 @@ export default function Scanner() {
       </header>
 
       {showingForm ? (
-        <VisitorForm sessionUuid={sessionUuid} onDone={handleVisitorDone} onCancel={resumeScan} />
+        <VisitorForm
+          sessionUuid={sessionUuid}
+          onDone={handleVisitorDone}
+          onCancel={handleVisitorCancel}
+        />
       ) : (
         <>
           {/* Scanner viewport */}
@@ -348,18 +334,6 @@ export default function Scanner() {
               className={`absolute inset-0 h-full w-full object-cover ${cameraActive ? "" : "opacity-0"}`}
             />
             <canvas ref={canvasRef} className="hidden" />
-            <input
-              ref={captureInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) handleUpload(file);
-                event.target.value = "";
-              }}
-            />
 
             {cameraError ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8 text-center">
@@ -367,24 +341,14 @@ export default function Scanner() {
                   <CameraIcon className="h-8 w-8" />
                 </span>
                 <p className="text-sm text-zinc-400">{cameraError}</p>
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={openDeviceCamera}
-                    className="inline-flex h-10 items-center gap-2 rounded-xl bg-zinc-100 px-4 text-sm font-semibold text-zinc-900 transition hover:bg-white"
-                  >
-                    <CameraIcon className="h-4 w-4" />
-                    Open Camera
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void setupCamera()}
-                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-600 px-4 text-sm font-semibold text-zinc-200 transition hover:border-zinc-400"
-                  >
-                    <RefreshIcon className="h-4 w-4" />
-                    Try again
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => void setupCamera()}
+                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-600 px-4 text-sm font-semibold text-zinc-200 transition hover:border-zinc-400"
+                >
+                  <RefreshIcon className="h-4 w-4" />
+                  Try again
+                </button>
               </div>
             ) : status === "idle" ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8 text-center">
@@ -392,42 +356,23 @@ export default function Scanner() {
                   <CameraIcon className="h-8 w-8" />
                 </span>
                 {insecure ? (
-                  <>
-                    <p className="text-sm text-zinc-400">
-                      Camera access needs HTTPS on phones. Open the device camera instead.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={openDeviceCamera}
-                      className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-400"
-                    >
-                      <CameraIcon className="h-4.5 w-4.5" />
-                      Open Camera
-                    </button>
-                  </>
+                  <p className="text-sm text-zinc-400">
+                    Camera access needs HTTPS on phones. Open this page over a secure
+                    connection, or upload an image below.
+                  </p>
                 ) : (
                   <>
                     <p className="text-sm text-zinc-400">
                       Allow camera access to scan QR codes.
                     </p>
-                    <div className="flex flex-wrap items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void setupCamera()}
-                        className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-400"
-                      >
-                        <CameraIcon className="h-4.5 w-4.5" />
-                        Allow Camera Access
-                      </button>
-                      <button
-                        type="button"
-                        onClick={openDeviceCamera}
-                        className="inline-flex h-11 items-center gap-2 rounded-xl border border-zinc-600 px-5 text-sm font-semibold text-zinc-200 transition hover:border-zinc-400"
-                      >
-                        <CameraIcon className="h-4.5 w-4.5" />
-                        Open Camera
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void setupCamera()}
+                      className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-400"
+                    >
+                      <CameraIcon className="h-4.5 w-4.5" />
+                      Allow Camera Access
+                    </button>
                   </>
                 )}
               </div>
@@ -442,26 +387,12 @@ export default function Scanner() {
                   <span className="absolute bottom-0 right-0 h-8 w-8 rounded-br-2xl border-b-4 border-r-4 border-emerald-400" />
                 </div>
                 {/* Scanning line */}
-                {status === "scanning" && (
-                  <div className="pointer-events-none absolute left-9 right-9 h-0.5 animate-scan-line rounded-full bg-emerald-400 shadow-[0_0_16px_4px_rgba(52,211,153,0.7)]" />
-                )}
+                <div className="pointer-events-none absolute left-9 right-9 h-0.5 animate-scan-line rounded-full bg-emerald-400 shadow-[0_0_16px_4px_rgba(52,211,153,0.7)]" />
                 {/* Status pill */}
                 <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
                   <span className="inline-flex items-center gap-2 rounded-full bg-black/60 px-3.5 py-1.5 text-xs font-semibold backdrop-blur-sm">
-                    <span
-                      className={`h-2 w-2 rounded-full ${
-                        status === "success"
-                          ? "bg-emerald-400"
-                          : status === "error"
-                            ? "bg-red-400"
-                            : "animate-pulse-soft bg-emerald-400"
-                      }`}
-                    />
-                    {status === "success"
-                      ? "Registered"
-                      : status === "error"
-                        ? "Failed"
-                        : "Scanning..."}
+                    <span className="h-2 w-2 animate-pulse-soft rounded-full bg-emerald-400" />
+                    Scanning...
                   </span>
                 </div>
               </>
@@ -477,9 +408,9 @@ export default function Scanner() {
                 aria-label="Switch camera"
                 className="h-11 flex-1 truncate rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm text-zinc-200 outline-none focus:border-emerald-500"
               >
-                {cameras.map((camera) => (
+                {cameras.map((camera, index) => (
                   <option key={camera.deviceId} value={camera.deviceId}>
-                    {camera.label || `Camera ${cameras.indexOf(camera) + 1}`}
+                    {camera.label || `Camera ${index + 1}`}
                   </option>
                 ))}
               </select>
@@ -530,61 +461,8 @@ export default function Scanner() {
       {/* Result */}
       {result && !showingForm && (
         <div className="mt-4">
-          <ResultCard result={result} onScanAgain={resumeScan} />
+          <ResultCard result={result} onScanAgain={() => setResult(null)} />
         </div>
-      )}
-
-      {/* History */}
-      {history.length > 0 && !showingForm && (
-        <section className="mt-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-semibold tracking-widest text-zinc-500 uppercase">
-              Recent scans
-            </h2>
-            <button
-              type="button"
-              onClick={() => {
-                setHistory([]);
-                try {
-                  localStorage.removeItem(HISTORY_KEY);
-                } catch {
-                  /* ignore */
-                }
-              }}
-              className="inline-flex items-center gap-1 text-xs text-zinc-500 transition hover:text-red-400"
-            >
-              <TrashIcon className="h-3.5 w-3.5" />
-              Clear
-            </button>
-          </div>
-          <ul className="no-scrollbar mt-2 flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
-            {history.map((item, index) => (
-              <li key={`${item.timestamp}-${index}`}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setResult(item);
-                    setSessionUuid(null);
-                    setStatus(item.status);
-                  }}
-                  className="flex w-full items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/60 px-3 py-2.5 text-left transition hover:border-zinc-600"
-                >
-                  <span
-                    className={`h-2 w-2 shrink-0 rounded-full ${
-                      item.status === "success" ? "bg-emerald-400" : "bg-red-400"
-                    }`}
-                  />
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-300">
-                    {item.code || "(no code)"}
-                  </span>
-                  <span className="shrink-0 text-[10px] text-zinc-500">
-                    {timeAgo(item.timestamp)}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
       )}
     </div>
   );
