@@ -1,6 +1,6 @@
 "use client";
 
-import jsQR from "jsqr";
+import { decodeImageData, imageDataFromUrl } from "@/lib/qrDecode";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { extractSessionUuid } from "@/lib/qr";
 import type { ScanResult, ScanStatus } from "@/lib/types";
@@ -64,12 +64,23 @@ export default function Scanner() {
   const [history, setHistory] = useState<ScanResult[]>(() => readHistory());
   const [installReady, setInstallReady] = useState(false);
 
+  const [insecure] = useState(
+    () => typeof window !== "undefined" && !window.isSecureContext
+  );
+
   const stopScanningLoop = useCallback(() => {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     }
   }, []);
+
+  const captureInputRef = useRef<HTMLInputElement>(null);
+
+  const openDeviceCamera = useCallback(() => {
+    stopScanningLoop();
+    captureInputRef.current?.click();
+  }, [stopScanningLoop]);
 
   const pushHistory = useCallback((entry: ScanResult) => {
     setHistory((prev) => {
@@ -125,16 +136,16 @@ export default function Scanner() {
 
       detectingRef.current = true;
       try {
-        const width = Math.max(320, Math.floor(video.videoWidth / 2));
-        const height = Math.max(240, Math.floor(video.videoHeight / 2));
+        const width = Math.max(320, Math.min(960, Math.floor(video.videoWidth / 2)));
+        const height = Math.max(240, Math.floor((width * video.videoHeight) / video.videoWidth));
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
         if (!ctx) return;
         ctx.drawImage(video, 0, 0, width, height);
         const image = ctx.getImageData(0, 0, width, height);
-        const qr = jsQR(image.data, width, height);
-        if (qr?.data) handleScan(qr.data);
+        const text = decodeImageData(image.data, width, height);
+        if (text) handleScan(text);
       } catch {
         /* frame read can fail in rare cases; keep scanning */
       } finally {
@@ -153,7 +164,9 @@ export default function Scanner() {
       setTorchOn(false);
 
       if (!navigator.mediaDevices?.getUserMedia) {
-        setCameraError("Camera API not supported in this browser. Use the upload option.");
+        setCameraError(
+          "Camera API not supported in this browser. Open the device camera or use the upload option."
+        );
         setStatus("idle");
         return;
       }
@@ -182,7 +195,11 @@ export default function Scanner() {
         setStatus("scanning");
         startScanningLoop();
       } catch {
-        setCameraError("Camera unavailable or permission denied. Allow camera access in your browser settings, then try again.");
+        setCameraError(
+          window.isSecureContext
+            ? "Camera unavailable or permission denied. Allow camera access in your browser settings, then try again."
+            : "Camera access needs HTTPS. Open the device camera instead."
+        );
         setStatus("idle");
       }
     },
@@ -230,43 +247,9 @@ export default function Scanner() {
       setResult(null);
 
       const reader = new FileReader();
-      reader.onload = () => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          canvas.width = img.width;
-          canvas.height = img.height;
-          const ctx = canvas.getContext("2d", { willReadFrequently: true });
-          if (!ctx) {
-            const scanResult: ScanResult = {
-              code: "",
-              status: "error",
-              message: "Could not read the image.",
-              timestamp: Date.now(),
-            };
-            setResult(scanResult);
-            setStatus("error");
-            pushHistory(scanResult);
-            return;
-          }
-          ctx.drawImage(img, 0, 0);
-          const image = ctx.getImageData(0, 0, img.width, img.height);
-          const qr = jsQR(image.data, img.width, img.height);
-          if (!qr?.data) {
-            const scanResult: ScanResult = {
-              code: "",
-              status: "error",
-              message: "No QR code found in that image.",
-              timestamp: Date.now(),
-            };
-            setResult(scanResult);
-            setStatus("error");
-            pushHistory(scanResult);
-            return;
-          }
-          handleScan(qr.data);
-        };
-        img.onerror = () => {
+      reader.onload = async () => {
+        const image = await imageDataFromUrl(reader.result as string);
+        if (!image) {
           const scanResult: ScanResult = {
             code: "",
             status: "error",
@@ -276,8 +259,22 @@ export default function Scanner() {
           setResult(scanResult);
           setStatus("error");
           pushHistory(scanResult);
-        };
-        img.src = reader.result as string;
+          return;
+        }
+        const text = decodeImageData(image.data, image.width, image.height, true);
+        if (!text) {
+          const scanResult: ScanResult = {
+            code: "",
+            status: "error",
+            message: "No QR code found in that image.",
+            timestamp: Date.now(),
+          };
+          setResult(scanResult);
+          setStatus("error");
+          pushHistory(scanResult);
+          return;
+        }
+        handleScan(text);
       };
       reader.readAsDataURL(file);
     },
@@ -350,6 +347,18 @@ export default function Scanner() {
               className={`absolute inset-0 h-full w-full object-cover ${cameraActive ? "" : "opacity-0"}`}
             />
             <canvas ref={canvasRef} className="hidden" />
+            <input
+              ref={captureInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) handleUpload(file);
+                event.target.value = "";
+              }}
+            />
 
             {cameraError ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8 text-center">
@@ -357,35 +366,69 @@ export default function Scanner() {
                   <CameraIcon className="h-8 w-8" />
                 </span>
                 <p className="text-sm text-zinc-400">{cameraError}</p>
-                <button
-                  type="button"
-                  onClick={() => void setupCamera()}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-zinc-100 px-4 text-sm font-semibold text-zinc-900 transition hover:bg-white"
-                >
-                  <RefreshIcon className="h-4 w-4" />
-                  Try again
-                </button>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={openDeviceCamera}
+                    className="inline-flex h-10 items-center gap-2 rounded-xl bg-zinc-100 px-4 text-sm font-semibold text-zinc-900 transition hover:bg-white"
+                  >
+                    <CameraIcon className="h-4 w-4" />
+                    Open Camera
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void setupCamera()}
+                    className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-600 px-4 text-sm font-semibold text-zinc-200 transition hover:border-zinc-400"
+                  >
+                    <RefreshIcon className="h-4 w-4" />
+                    Try again
+                  </button>
+                </div>
               </div>
             ) : status === "idle" ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8 text-center">
                 <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-800 text-zinc-400">
                   <CameraIcon className="h-8 w-8" />
                 </span>
-                <p className="text-sm text-zinc-400">
-                  Allow camera access to scan QR codes.
-                </p>
-                <p className="text-xs text-zinc-500">
-                  On iPhone, tap Allow in the browser prompt. Camera requires HTTPS or
-                  localhost.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => void setupCamera()}
-                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-400"
-                >
-                  <CameraIcon className="h-4.5 w-4.5" />
-                  Allow Camera Access
-                </button>
+                {insecure ? (
+                  <>
+                    <p className="text-sm text-zinc-400">
+                      Camera access needs HTTPS on phones. Open the device camera instead.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={openDeviceCamera}
+                      className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-400"
+                    >
+                      <CameraIcon className="h-4.5 w-4.5" />
+                      Open Camera
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-zinc-400">
+                      Allow camera access to scan QR codes.
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void setupCamera()}
+                        className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-400"
+                      >
+                        <CameraIcon className="h-4.5 w-4.5" />
+                        Allow Camera Access
+                      </button>
+                      <button
+                        type="button"
+                        onClick={openDeviceCamera}
+                        className="inline-flex h-11 items-center gap-2 rounded-xl border border-zinc-600 px-5 text-sm font-semibold text-zinc-200 transition hover:border-zinc-400"
+                      >
+                        <CameraIcon className="h-4.5 w-4.5" />
+                        Open Camera
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
               <>
