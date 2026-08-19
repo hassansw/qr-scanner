@@ -6,16 +6,16 @@ export type VisitorPreset = Omit<VisitorFormData, "session_uuid">;
 export const VISITOR_PRESETS: VisitorPreset[] = [
   {
     name: "Ahmed Raza",
-    email: "ahmed.raza@yopmaila.com",
+    email: "ahmed.raza@yopmail.com",
     phone: "+923211234567",
     visitortype: "CUSTOMER",
     is_existing: false,
-    company_name: "Ahmad Hassan Textile Mills Limited",
-    website: "https://www.ahtml.com.pk",
+    company_name: "Engro",
+    website: "",
   },
   {
     name: "Sana Tariq",
-    email: "sana.tariq@yopmaila.com",
+    email: "sana.tariq@yopmail.com",
     phone: "+923001112233",
     visitortype: "CUSTOMER",
     is_existing: false,
@@ -24,7 +24,7 @@ export const VISITOR_PRESETS: VisitorPreset[] = [
   },
   {
     name: "Usman Ghani",
-    email: "usman.ghani@yopmaila.com",
+    email: "usman.ghani@yopmail.com",
     phone: "+923454567890",
     visitortype: "CUSTOMER",
     is_existing: false,
@@ -33,7 +33,7 @@ export const VISITOR_PRESETS: VisitorPreset[] = [
   },
   {
     name: "Fatima Noor",
-    email: "fatima.noor@yopmaila.com",
+    email: "fatima.noor@yopmail.com",
     phone: "+923335556677",
     visitortype: "CUSTOMER",
     is_existing: false,
@@ -42,7 +42,7 @@ export const VISITOR_PRESETS: VisitorPreset[] = [
   },
   {
     name: "Imran Ali",
-    email: "imran.ali@yopmaila.com",
+    email: "imran.ali@yopmail.com",
     phone: "+923216667788",
     visitortype: "CUSTOMER",
     is_existing: false,
@@ -51,7 +51,7 @@ export const VISITOR_PRESETS: VisitorPreset[] = [
   },
   {
     name: "Zara Sheikh",
-    email: "zara.sheikh@yopmaila.com",
+    email: "zara.sheikh@yopmail.com",
     phone: "+923425678901",
     visitortype: "CUSTOMER",
     is_existing: false,
@@ -60,7 +60,7 @@ export const VISITOR_PRESETS: VisitorPreset[] = [
   },
   {
     name: "Hassan Mahmood",
-    email: "hassan.mahmood@yopmaila.com",
+    email: "hassan.mahmood@yopmail.com",
     phone: "+923308889900",
     visitortype: "CUSTOMER",
     is_existing: false,
@@ -69,7 +69,7 @@ export const VISITOR_PRESETS: VisitorPreset[] = [
   },
   {
     name: "Ayesha Khan",
-    email: "ayesha.khan@yopmaila.com",
+    email: "ayesha.khan@yopmail.com",
     phone: "+923211223344",
     visitortype: "CUSTOMER",
     is_existing: false,
@@ -78,7 +78,7 @@ export const VISITOR_PRESETS: VisitorPreset[] = [
   },
   {
     name: "Bilal Ahmed",
-    email: "bilal.ahmed@yopmaila.com",
+    email: "bilal.ahmed@yopmail.com",
     phone: "+923124567890",
     visitortype: "CUSTOMER",
     is_existing: false,
@@ -87,7 +87,7 @@ export const VISITOR_PRESETS: VisitorPreset[] = [
   },
   {
     name: "Saima Akhtar",
-    email: "saima.akhtar@yopmaila.com",
+    email: "saima.akhtar@yopmail.com",
     phone: "+923001234567",
     visitortype: "CUSTOMER",
     is_existing: false,
@@ -96,7 +96,7 @@ export const VISITOR_PRESETS: VisitorPreset[] = [
   },
   {
     name: "Kamran Javed",
-    email: "kamran.javed@yopmaila.com",
+    email: "kamran.javed@yopmail.com",
     phone: "+923334455667",
     visitortype: "CUSTOMER",
     is_existing: false,
@@ -105,7 +105,7 @@ export const VISITOR_PRESETS: VisitorPreset[] = [
   },
   {
     name: "Nadia Ali",
-    email: "nadia.ali@yopmaila.com",
+    email: "nadia.ali@yopmail.com",
     phone: "+923124567891",
     visitortype: "CUSTOMER",
     is_existing: false,
@@ -114,7 +114,7 @@ export const VISITOR_PRESETS: VisitorPreset[] = [
   },
   {
     name: "Farhan Anwar",
-    email: "farhan.anwar@yopmaila.com",
+    email: "farhan.anwar@yopmail.com",
     phone: "+923215678902",
     visitortype: "CUSTOMER",
     is_existing: false,
@@ -123,7 +123,7 @@ export const VISITOR_PRESETS: VisitorPreset[] = [
   },
   {
     name: "Hina Tariq",
-    email: "hina.tariq@yopmaila.com",
+    email: "hina.tariq@yopmail.com",
     phone: "+923416789012",
     visitortype: "CUSTOMER",
     is_existing: false,
@@ -132,7 +132,7 @@ export const VISITOR_PRESETS: VisitorPreset[] = [
   },
   {
     name: "Muhammad Ilyas",
-    email: "muhammad.ilyas@yopmaila.com",
+    email: "muhammad.ilyas@yopmail.com",
     phone: "+923009988776",
     visitortype: "CUSTOMER",
     is_existing: false,
@@ -141,7 +141,7 @@ export const VISITOR_PRESETS: VisitorPreset[] = [
   },
   {
     name: "Rubina Shaheen",
-    email: "rubina.shaheen@yopmaila.com",
+    email: "rubina.shaheen@yopmail.com",
     phone: "+923331112222",
     visitortype: "CUSTOMER",
     is_existing: false,
@@ -150,7 +150,7 @@ export const VISITOR_PRESETS: VisitorPreset[] = [
   },
   {
     name: "Shahid Afridi",
-    email: "shahid.afridi@yopmaila.com",
+    email: "shahid.afridi@yopmail.com",
     phone: "+923224455667",
     visitortype: "CUSTOMER",
     is_existing: false,
@@ -159,7 +159,7 @@ export const VISITOR_PRESETS: VisitorPreset[] = [
   },
   {
     name: "Amina Asif",
-    email: "amina.asif@yopmaila.com",
+    email: "amina.asif@yopmail.com",
     phone: "+923455678901",
     visitortype: "CUSTOMER",
     is_existing: false,
@@ -168,7 +168,7 @@ export const VISITOR_PRESETS: VisitorPreset[] = [
   },
   {
     name: "Naveed Ahmed",
-    email: "naveed.ahmed@yopmaila.com",
+    email: "naveed.ahmed@yopmail.com",
     phone: "+923098765432",
     visitortype: "CUSTOMER",
     is_existing: false,
@@ -177,7 +177,7 @@ export const VISITOR_PRESETS: VisitorPreset[] = [
   },
   {
     name: "Sadia Malik",
-    email: "sadia.malik@yopmaila.com",
+    email: "sadia.malik@yopmail.com",
     phone: "+923456789012",
     visitortype: "CUSTOMER",
     is_existing: false,
