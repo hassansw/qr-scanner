@@ -1,4 +1,5 @@
 import type { ScanApiResponse, VisitorFormData } from "@/lib/types";
+import { DEFAULT_VISITOR_API_URL } from "../app/api/visitors/route";
 
 type ProxyEnvelope = { ok: boolean; status: number; data: unknown };
 
@@ -13,7 +14,7 @@ function isProxyEnvelope(value: unknown): value is ProxyEnvelope {
 }
 
 export async function submitVisitor(payload: VisitorFormData): Promise<ScanApiResponse> {
-  const response = await fetch("/api/visitors", {
+  const response = await fetch(DEFAULT_VISITOR_API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
